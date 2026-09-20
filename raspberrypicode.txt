@@ -1,0 +1,47 @@
+import serial
+import time
+import requests
+
+# === CONFIGURATION ===
+serial_port = '/dev/ttyUSB0'  # or '/dev/ttyACM0' based on your setup
+baud_rate = 9600
+thingspeak_api_key = 'NGFF717NMYED0MKZ'  # ✅ Your actual API key
+
+# === Setup Serial Connection ===
+ser = serial.Serial(serial_port, baud_rate, timeout=2)
+time.sleep(2)  # Allow time for Arduino to reset
+
+def parse_data(line):
+    try:
+        # Expected format:
+        # 🌡 Temp: 27.60 °C, 💧 Hum: 51.00 %, 💓 Pulse: LOW, BPM: 162 🚨 ALERT: BPM too high!
+
+        parts = line.split(',')
+
+        temp = float(parts[0].split(':')[1].replace("°C", "").strip())
+        hum = float(parts[1].split(':')[1].replace("%", "").strip())
+        bpm = int(parts[3].split(':')[1].strip())
+
+        return temp, hum, bpm
+    except Exception as e:
+        print("⚠ Parse error:", e)
+        return None, None, None
+
+while True:
+    try:
+        line = ser.readline().decode('utf-8').strip()
+        print("📡 From Arduino:", line)
+
+        temp, hum, bpm = parse_data(line)
+
+        if temp is not None and hum is not None and bpm is not None:
+            # Build ThingSpeak URL
+            url = f"https://api.thingspeak.com/update?api_key={'NGFF717NMYED0MKZ'}&field1={temp}&field2={hum}&field3={bpm}"
+            response = requests.get(url)
+            print("✅ Data Sent to ThingSpeak! Response Code:", response.status_code)
+        else:
+            print("⚠ Skipped invalid data")
+
+        time.sleep(15)  # Respect ThingSpeak's rate limit
+    except Exception as e:
+        print("❌ Error:", e)
